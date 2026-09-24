@@ -323,7 +323,24 @@ class MainActivity : ComponentActivity() {
                     CoroutineScope(Dispatchers.Main).launch {
                         libreLinkUp.schedule()
                     }
-                    viewModel.setStatus("Logged in as " + loginResult.data.user.firstName + " " + loginResult.data.user.lastName)
+                    val loggedIn = "Logged in as " + loginResult.data.user.firstName + " " + loginResult.data.user.lastName
+                    // Ask at once who shares with this account: the patient's own
+                    // LibreView login sees nobody, and that used to surface only as
+                    // a failed poll a quarter of an hour later (Eric, 1.5.4).
+                    viewModel.setStatus(loggedIn + ". Checking who shares with this account\u2026")
+                    val sharing = try {
+                        val connections = libreLinkUp.connections()
+                        if (connections?.ticket != null) libreLinkUp.authTicket = connections.ticket
+                        val people = connections?.data.orEmpty()
+                        if (people.isEmpty()) {
+                            "No one is sharing with this account. Use the LibreLinkUp follower account that the Libre 3 app shares to, not the Libre 3 app's own login."
+                        } else {
+                            "Sharing from " + people.joinToString { (it.firstName.orEmpty() + " " + it.lastName.orEmpty()).trim() } + "."
+                        }
+                    } catch (e: Exception) {
+                        "Could not list who shares with this account: " + e.message
+                    }
+                    viewModel.setStatus("$loggedIn. $sharing")
                 } else {
                     if (loginResult != null) {
                         if (loginResult.error != null) Log.e(

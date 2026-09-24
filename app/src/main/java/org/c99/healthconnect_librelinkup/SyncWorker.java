@@ -61,6 +61,9 @@ public class SyncWorker extends Worker {
     private final LibreLinkUp libreLinkUp;
     private final HealthConnectClient healthConnectClient;
 
+    /** Also shown at login, so the wrong account is caught at once. */
+    static final String NO_ONE_SHARING = "Failed: no one is sharing with this LibreView account. Log in with the LibreLinkUp follower account that the Libre 3 app shares to, not the Libre 3 app's own login.";
+
     private final String GLUCOSE_KEY = "org.c99.healthconnect_librelinkup.glucose";
     private final String TREND_ARROW_KEY = "org.c99.healthconnect_librelinkup.trendArrow";
     private final String COLOR_KEY = "org.c99.healthconnect_librelinkup.color";
@@ -86,8 +89,16 @@ public class SyncWorker extends Worker {
                 return Result.failure();
             }
             LibreLinkUp.ConnectionsResult result = libreLinkUp.connections();
-            if (result == null || result.data == null || result.data.isEmpty()) {
-                SensorStore.noteResult(context, "Failed: LibreView returned no connection" + (result != null && result.error != null ? " (" + result.error.message + ")" : ""));
+            if (result == null || result.data == null) {
+                String detail = result == null ? "no reply" : "status " + result.status + (result.error != null ? ", " + result.error.message : "");
+                SensorStore.noteResult(context, "Failed: LibreView's reply was not understood (" + detail + ")");
+                return Result.failure();
+            }
+            if (result.data.isEmpty()) {
+                // Status 0 and nobody listed: this is what the patient's own
+                // LibreView account sees. Only the follower account the Libre
+                // app shares to gets connections (Eric, 1.5.4).
+                SensorStore.noteResult(context, NO_ONE_SHARING);
                 return Result.failure();
             }
             libreLinkUp.setAuthTicket(result.ticket);

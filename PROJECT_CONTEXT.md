@@ -119,6 +119,18 @@ miss), and how the last poll ended. Now:
   in an account's reply cannot sink the poll, and the sensor details are
   saved in their own try so a surprise there never costs the glucose.
 
+### 1.5.4: the wrong account is named at login
+
+1.5.3's "LibreView returned no connection" (Eric, September 24, 2026) is
+what the API says when the login is a LibreView account that nobody
+shares with: LibreView answers status 0 and an empty list. That is the
+patient's own account; only the LibreLinkUp *follower* account, the one
+the Libre 3 app was told to share with, receives connections. Now the
+login step asks for the connections straight away and says "Sharing from
+<name>" or that no one shares with the account and which login to use,
+and the sync line says the same instead of "no connection". A reply
+without a data list is reported separately, with the status code.
+
 ### The provider contract
 
 Authority `org.c99.healthconnect_librelinkup.sensor`, read-only, guarded
