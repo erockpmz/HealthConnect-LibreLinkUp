@@ -54,10 +54,12 @@ carries `sdk.dir=/Users/elorson/Library/Android/sdk`. The build:
 ```
 
 A debug build carries Eric's shared debug certificate, not the author's,
-so it cannot install over the upstream release: the phone has to
-uninstall that first, losing the LibreLinkUp login and the cached token
-and nothing else (see `AGENTS.md`). The package name is unchanged, so
-Health Connect sees one continuous glucose source across the switch.
+so it could not install over the upstream release: on September 23, 2026
+Eric uninstalled that, installed 1.5.2 (versionCode 7) and logged in
+again ("installed"). The phone now runs this fork, and later builds
+install over it like any other of Eric's apps. The package name is
+unchanged, so Health Connect sees one continuous glucose source across
+the switch.
 
 ## Eric's 1.5.1: everything a poll offers
 
