@@ -131,6 +131,12 @@ login step asks for the connections straight away and says "Sharing from
 and the sync line says the same instead of "no connection". A reply
 without a data list is reported separately, with the status code.
 
+Confirmed on the S23 on September 24, 2026: it was the wrong account.
+With the follower login, 1.5.4 (versionCode 9) syncs; glucose and the
+sensor reach Health Connect and HealthView. **Lesson for next time the
+login is entered:** the LibreLinkUp follower account, never the Libre 3
+app's own.
+
 ### The provider contract
 
 Authority `org.c99.healthconnect_librelinkup.sensor`, read-only, guarded
