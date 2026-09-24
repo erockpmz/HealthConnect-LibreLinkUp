@@ -25,6 +25,8 @@ public final class SensorStore {
     static final String KEY_ENDS_AT = "endsAtEpochMillis";
     static final String KEY_WARMUP_MINUTES = "warmupMinutes";
     static final String KEY_PRODUCT_TYPE = "productType";
+    /** The life the end was worked out with, so the provider says which. */
+    static final String KEY_LIFE_DAYS_USED = "lifeDaysUsed";
     static final String KEY_LAST_SYNC = "lastSyncEpochMillis";
 
     static final String KEY_READING_AT = "readingAtEpochMillis";
@@ -54,9 +56,11 @@ public final class SensorStore {
         SharedPreferences.Editor e = prefs(context).edit();
         LibreLinkUp.Sensor sensor = c.sensor;
         if (sensor != null && sensor.a > 0) {
+            int life = SensorLife.lifeDays(context);
             e.putString(KEY_SERIAL, sensor.sn == null ? "" : sensor.sn)
                     .putLong(KEY_ACTIVATED_AT, Instant.ofEpochSecond(sensor.a).toEpochMilli())
-                    .putLong(KEY_ENDS_AT, SensorLife.endsAt(sensor.a).toEpochMilli())
+                    .putLong(KEY_ENDS_AT, SensorLife.endsAt(sensor.a, life).toEpochMilli())
+                    .putInt(KEY_LIFE_DAYS_USED, life)
                     .putInt(KEY_WARMUP_MINUTES, sensor.w)
                     .putInt(KEY_PRODUCT_TYPE, sensor.pt);
         }
@@ -84,6 +88,19 @@ public final class SensorStore {
         e.apply();
         context.getContentResolver().notifyChange(SensorProvider.SENSOR_URI, null);
         context.getContentResolver().notifyChange(SensorProvider.READING_URI, null);
+    }
+
+    /** After the life setting changes: the same activation, a new end. */
+    public static void recomputeEnd(Context context) {
+        SharedPreferences p = prefs(context);
+        if (!p.contains(KEY_ACTIVATED_AT)) return;
+        int life = SensorLife.lifeDays(context);
+        long activatedSeconds = p.getLong(KEY_ACTIVATED_AT, 0) / 1000L;
+        p.edit()
+                .putLong(KEY_ENDS_AT, SensorLife.endsAt(activatedSeconds, life).toEpochMilli())
+                .putInt(KEY_LIFE_DAYS_USED, life)
+                .apply();
+        context.getContentResolver().notifyChange(SensorProvider.SENSOR_URI, null);
     }
 
     public static boolean hasSensor(Context context) {

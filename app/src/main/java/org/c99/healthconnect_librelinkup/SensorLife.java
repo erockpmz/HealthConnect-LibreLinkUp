@@ -4,22 +4,43 @@
 
 package org.c99.healthconnect_librelinkup;
 
+import android.content.Context;
+
 import java.time.Duration;
 import java.time.Instant;
 
 /**
  * When the sensor ends. LibreView sends the activation time but no expiry,
- * so the end is the activation plus the sensor's life, a constant per
- * model: 14 days for the Libre 3 Eric wears (15 for the Plus sensors).
+ * so the end is the activation plus the sensor's life, which is a setting
+ * on the app's screen: 15 days, the Libre 3 Plus Eric wears (the original
+ * Libre 3 and the Libre 2 ran 14). A wrong figure here is off by a day,
+ * not dangerous, and the setting means a sensor change never needs a rebuild.
  */
 public final class SensorLife {
-    /** Libre 2 and Libre 3. The Plus sensors run 15. */
-    public static final int LIFE_DAYS = 14;
+    public static final int DEFAULT_LIFE_DAYS = 15;
+    public static final int MIN_LIFE_DAYS = 7;
+    public static final int MAX_LIFE_DAYS = 30;
+    static final String KEY_LIFE_DAYS = "lifeDays";
 
     private SensorLife() {}
 
-    public static Instant endsAt(long activationEpochSeconds) {
-        return Instant.ofEpochSecond(activationEpochSeconds).plus(Duration.ofDays(LIFE_DAYS));
+    /** The life in days from the setting, the default when unset. */
+    public static int lifeDays(Context context) {
+        int days = SensorStore.prefs(context).getInt(KEY_LIFE_DAYS, DEFAULT_LIFE_DAYS);
+        return clamp(days);
+    }
+
+    public static void setLifeDays(Context context, int days) {
+        SensorStore.prefs(context).edit().putInt(KEY_LIFE_DAYS, clamp(days)).apply();
+        SensorStore.recomputeEnd(context);
+    }
+
+    public static int clamp(int days) {
+        return Math.max(MIN_LIFE_DAYS, Math.min(MAX_LIFE_DAYS, days));
+    }
+
+    public static Instant endsAt(long activationEpochSeconds, int lifeDays) {
+        return Instant.ofEpochSecond(activationEpochSeconds).plus(Duration.ofDays(lifeDays));
     }
 
     /** Whole days left, never below zero: 6 with 6 days 5 hours to go, 0 on the last day. */

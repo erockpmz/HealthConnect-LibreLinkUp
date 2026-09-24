@@ -8,11 +8,21 @@ import org.junit.Test;
 
 public class SensorLifeTest {
     private final long activation = Instant.parse("2026-09-23T00:00:00Z").getEpochSecond();
-    private final Instant ends = SensorLife.endsAt(activation);
+    private final Instant ends = SensorLife.endsAt(activation, 14);
 
     @Test
-    public void aLibre3Lasts14DaysFromActivation() {
+    public void theEndIsTheActivationPlusTheLife() {
         assertEquals(Instant.parse("2026-10-07T00:00:00Z"), ends);
+        // Eric's Libre 3 Plus: 15 days, the default.
+        assertEquals(15, SensorLife.DEFAULT_LIFE_DAYS);
+        assertEquals(Instant.parse("2026-10-08T00:00:00Z"), SensorLife.endsAt(activation, SensorLife.DEFAULT_LIFE_DAYS));
+    }
+
+    @Test
+    public void theLifeSettingIsKeptWithinReason() {
+        assertEquals(7, SensorLife.clamp(1));
+        assertEquals(30, SensorLife.clamp(90));
+        assertEquals(15, SensorLife.clamp(15));
     }
 
     @Test

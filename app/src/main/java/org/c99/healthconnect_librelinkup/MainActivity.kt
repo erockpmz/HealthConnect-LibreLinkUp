@@ -98,6 +98,8 @@ data class LoginUiState(
     var status: String = "",
     /** "Sensor ends in 6 days (3 Oct 2026)", from the last poll (Eric's 1.5.1). */
     var sensor: String = "",
+    /** The sensor's life in days, the setting under the sensor line. */
+    var sensorLifeDays: String = "",
     var version: String = "Version",
     var isIgnoringBatteryOptimizations: Boolean = false
 )
@@ -126,6 +128,10 @@ class LoginViewModel: ViewModel() {
         _uiState.value = _uiState.value.copy(sensor = sensor)
     }
 
+    fun setSensorLifeDays(days: String) {
+        _uiState.value = _uiState.value.copy(sensorLifeDays = days)
+    }
+
     fun setVersion(version: String) {
         _uiState.value = _uiState.value.copy(version = version)
     }
@@ -149,7 +155,8 @@ class MainActivity : ComponentActivity() {
             MainView(
                 onUrlChanged = { libreLinkUp.setUrl(it) },
                 onLoginButtonClicked = { onLoginButtonClicked() },
-                onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() }
+                onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() },
+                onSensorLifeDaysChanged = { onSensorLifeDaysChanged(it) },
             )
         }
 
@@ -231,9 +238,24 @@ class MainActivity : ComponentActivity() {
         viewModel.setIsIgnoringBatteryOptimizations(powerManager.isIgnoringBatteryOptimizations(
             packageName
         ))
+        refreshSensorLines()
+        viewModel.setSensorLifeDays(SensorLife.lifeDays(this).toString())
+    }
+
+    private fun refreshSensorLines() {
         viewModel.setSensor(
             SensorStore.describeSensor(this, java.time.Instant.now()) + "\n" + SensorStore.describeReading(this)
         )
+    }
+
+    /** Typed on the screen; kept as typed, applied once it is a whole number of days. */
+    private fun onSensorLifeDaysChanged(text: String) {
+        viewModel.setSensorLifeDays(text)
+        val days = text.trim().toIntOrNull() ?: return
+        if (days in SensorLife.MIN_LIFE_DAYS..SensorLife.MAX_LIFE_DAYS) {
+            SensorLife.setLifeDays(this, days)
+            refreshSensorLines()
+        }
     }
 
     @SuppressLint("BatteryLife")
@@ -297,7 +319,8 @@ fun Modifier.autofill(
 fun MainView(viewModel: LoginViewModel = viewModel(),
              onUrlChanged: (String) -> Unit = {},
              onLoginButtonClicked: () -> Unit = {},
-             onDisableBatteryRestrictionsButtonClicked: () -> Unit = {}) {
+             onDisableBatteryRestrictionsButtonClicked: () -> Unit = {},
+             onSensorLifeDaysChanged: (String) -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val apiEndpoints = stringArrayResource(id = R.array.api_endpoints)
@@ -390,6 +413,15 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                 }
                 Text(uiState.status)
                 Text(uiState.sensor)
+                // The life LibreView does not send: 15 for a Libre 3 Plus, 14 for a Libre 3 or Libre 2.
+                OutlinedTextField(
+                    value = uiState.sensorLifeDays,
+                    onValueChange = onSensorLifeDaysChanged,
+                    label = { Text(stringResource(id = R.string.prompt_sensor_life)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.weight(1f))
                 if(!uiState.isIgnoringBatteryOptimizations) {
                     Text(

@@ -68,9 +68,12 @@ kept, and Moshi was silently dropping it. Now read and kept:
 
 - **The sensor**: serial, activation (`a`, Unix seconds), warm-up (`w`,
   60 minutes on a Libre 3) and product type (`pt`). LibreView sends no
-  expiry, so `SensorLife` adds the sensor's life to the activation:
-  **14 days**, the Libre 3 Eric wears (the Plus sensors run 15; change
-  `LIFE_DAYS` if the sensor changes).
+  expiry, so `SensorLife` adds the sensor's life to the activation. The
+  life is a setting on the app's screen (1.5.2), **15 days by default**:
+  Eric put on a new sensor and it said 15, so he is on the Libre 3 Plus
+  (the original Libre 3 and the Libre 2 ran 14; 1.5.1 had assumed 14).
+  Changing the setting recomputes the end from the stored activation at
+  once, and the provider's `life_days` says which life was used.
 - **The latest reading with its trend**: mg/dL, trend arrow (1 falling
   quickly to 5 rising quickly, `Trend`), LibreView's colour (1 in range,
   2 outside target, 3 alarm) and the high/low flags. Health Connect's

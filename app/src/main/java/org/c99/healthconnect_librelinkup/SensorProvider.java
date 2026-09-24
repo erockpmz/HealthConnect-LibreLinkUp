@@ -78,7 +78,7 @@ public class SensorProvider extends ContentProvider {
                             p.getString(SensorStore.KEY_SERIAL, ""),
                             p.getLong(SensorStore.KEY_ACTIVATED_AT, 0),
                             p.getLong(SensorStore.KEY_ENDS_AT, 0),
-                            SensorLife.LIFE_DAYS,
+                            p.getInt(SensorStore.KEY_LIFE_DAYS_USED, SensorLife.DEFAULT_LIFE_DAYS),
                             p.getInt(SensorStore.KEY_WARMUP_MINUTES, 0),
                             p.getInt(SensorStore.KEY_PRODUCT_TYPE, 0),
                             p.getLong(SensorStore.KEY_LAST_SYNC, 0),
