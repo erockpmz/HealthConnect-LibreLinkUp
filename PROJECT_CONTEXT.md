@@ -98,6 +98,27 @@ holds the last poll; the screen shows two lines under the login status
 in range, 7:45 PM. Target 70 to 180."); and `SensorProvider` publishes it
 for HealthView.
 
+### 1.5.3: the screen says what the sync did
+
+After the switch to the fork nothing arrived and nothing said why (Eric,
+September 24, 2026: "not getting blood glucose either"). Two things the
+screen never showed: whether Health Connect had allowed the app (a
+reinstall clears that grant, and the first-launch prompt is easy to
+miss), and how the last poll ended. Now:
+
+- A red line and an **Allow in Health Connect** button appear whenever
+  the read and write glucose permissions are not both granted; the
+  permission launcher is registered once in `onCreate` and shared.
+- **Last sync** line: "Last sync 9:41 PM: OK, 47 readings written", or
+  "Failed: ..." with the exception, "not logged in", "LibreView returned
+  no connection", or "Health Connect refused the write: ...". The worker
+  now waits for Health Connect's answer (30 s) instead of firing the
+  insert into a callback nobody read. A **Sync now** button runs one poll
+  and the line follows it.
+- Every new JSON field is boxed (`Long`, `Integer`, `Boolean`), so a null
+  in an account's reply cannot sink the poll, and the sensor details are
+  saved in their own try so a surprise there never costs the glucose.
+
 ### The provider contract
 
 Authority `org.c99.healthconnect_librelinkup.sensor`, read-only, guarded

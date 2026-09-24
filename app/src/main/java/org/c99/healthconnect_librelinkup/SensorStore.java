@@ -43,6 +43,8 @@ public final class SensorStore {
     static final String KEY_UNIT = "unit";
     static final String KEY_APP_VERSION = "libreAppVersion";
     static final String KEY_PATIENT = "patient";
+    static final String KEY_LAST_ATTEMPT = "lastAttemptEpochMillis";
+    static final String KEY_LAST_RESULT = "lastResult";
 
     private SensorStore() {}
 
@@ -55,14 +57,14 @@ public final class SensorStore {
         if (c == null) return;
         SharedPreferences.Editor e = prefs(context).edit();
         LibreLinkUp.Sensor sensor = c.sensor;
-        if (sensor != null && sensor.a > 0) {
+        if (sensor != null && sensor.a != null && sensor.a > 0) {
             int life = SensorLife.lifeDays(context);
             e.putString(KEY_SERIAL, sensor.sn == null ? "" : sensor.sn)
                     .putLong(KEY_ACTIVATED_AT, Instant.ofEpochSecond(sensor.a).toEpochMilli())
                     .putLong(KEY_ENDS_AT, SensorLife.endsAt(sensor.a, life).toEpochMilli())
                     .putInt(KEY_LIFE_DAYS_USED, life)
-                    .putInt(KEY_WARMUP_MINUTES, sensor.w)
-                    .putInt(KEY_PRODUCT_TYPE, sensor.pt);
+                    .putInt(KEY_WARMUP_MINUTES, sensor.w == null ? 0 : sensor.w)
+                    .putInt(KEY_PRODUCT_TYPE, sensor.pt == null ? 0 : sensor.pt);
         }
         LibreLinkUp.GlucoseMeasurement gm = c.glucoseMeasurement;
         if (gm != null && readingAt != null) {
@@ -73,13 +75,13 @@ public final class SensorStore {
                     .putBoolean(KEY_IS_HIGH, gm.isHigh)
                     .putBoolean(KEY_IS_LOW, gm.isLow);
         }
-        e.putInt(KEY_TARGET_LOW, c.targetLow)
-                .putInt(KEY_TARGET_HIGH, c.targetHigh)
-                .putInt(KEY_UNIT, c.uom);
+        e.putInt(KEY_TARGET_LOW, c.targetLow == null ? 0 : c.targetLow)
+                .putInt(KEY_TARGET_HIGH, c.targetHigh == null ? 0 : c.targetHigh)
+                .putInt(KEY_UNIT, c.uom == null ? 1 : c.uom);
         if (c.alarmRules != null) {
-            if (c.alarmRules.h != null) e.putInt(KEY_ALARM_HIGH, c.alarmRules.h.th);
-            if (c.alarmRules.l != null) e.putInt(KEY_ALARM_LOW, c.alarmRules.l.th);
-            if (c.alarmRules.f != null) e.putInt(KEY_ALARM_FIXED_LOW, c.alarmRules.f.th);
+            if (c.alarmRules.h != null && c.alarmRules.h.th != null) e.putInt(KEY_ALARM_HIGH, c.alarmRules.h.th);
+            if (c.alarmRules.l != null && c.alarmRules.l.th != null) e.putInt(KEY_ALARM_LOW, c.alarmRules.l.th);
+            if (c.alarmRules.f != null && c.alarmRules.f.th != null) e.putInt(KEY_ALARM_FIXED_LOW, c.alarmRules.f.th);
         }
         if (c.patientDevice != null && c.patientDevice.v != null) e.putString(KEY_APP_VERSION, c.patientDevice.v);
         String patient = ((c.firstName == null ? "" : c.firstName) + " " + (c.lastName == null ? "" : c.lastName)).trim();
@@ -101,6 +103,25 @@ public final class SensorStore {
                 .putInt(KEY_LIFE_DAYS_USED, life)
                 .apply();
         context.getContentResolver().notifyChange(SensorProvider.SENSOR_URI, null);
+    }
+
+    /** The worker is starting a poll. */
+    public static void noteAttempt(Context context) {
+        prefs(context).edit().putLong(KEY_LAST_ATTEMPT, System.currentTimeMillis()).apply();
+    }
+
+    /** How the poll ended, in words the screen shows: "OK, 47 readings" or "Failed: ...". */
+    public static void noteResult(Context context, String result) {
+        prefs(context).edit().putString(KEY_LAST_RESULT, result).apply();
+    }
+
+    /** "Last sync 9:41 PM: OK, 47 readings", or that none has run. */
+    public static String describeSync(Context context) {
+        SharedPreferences p = prefs(context);
+        if (!p.contains(KEY_LAST_ATTEMPT)) return "No sync has run yet. It runs every 15 minutes once logged in and allowed in Health Connect.";
+        Instant at = Instant.ofEpochMilli(p.getLong(KEY_LAST_ATTEMPT, 0));
+        String time = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).format(at.atZone(ZoneId.systemDefault()));
+        return "Last sync " + time + ": " + p.getString(KEY_LAST_RESULT, "running");
     }
 
     public static boolean hasSensor(Context context) {

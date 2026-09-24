@@ -81,6 +81,8 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.lifecycle.ViewModel
+import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequest
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +102,10 @@ data class LoginUiState(
     var sensor: String = "",
     /** The sensor's life in days, the setting under the sensor line. */
     var sensorLifeDays: String = "",
+    /** "Last sync 9:41 PM: OK, 47 readings", or why not. */
+    var syncStatus: String = "",
+    /** Whether Health Connect lets this app read and write glucose. */
+    var healthConnectAllowed: Boolean = true,
     var version: String = "Version",
     var isIgnoringBatteryOptimizations: Boolean = false
 )
@@ -132,6 +138,14 @@ class LoginViewModel: ViewModel() {
         _uiState.value = _uiState.value.copy(sensorLifeDays = days)
     }
 
+    fun setSyncStatus(status: String) {
+        _uiState.value = _uiState.value.copy(syncStatus = status)
+    }
+
+    fun setHealthConnectAllowed(allowed: Boolean) {
+        _uiState.value = _uiState.value.copy(healthConnectAllowed = allowed)
+    }
+
     fun setVersion(version: String) {
         _uiState.value = _uiState.value.copy(version = version)
     }
@@ -145,6 +159,21 @@ class MainActivity : ComponentActivity() {
     private lateinit var libreLinkUp: LibreLinkUp
     private val viewModel: LoginViewModel by viewModels()
 
+    private val healthPermissions = setOf(
+        HealthPermission.getReadPermission(BloodGlucoseRecord::class),
+        HealthPermission.getWritePermission(BloodGlucoseRecord::class),
+    )
+
+    /** Registered once, in onCreate; the Allow button and the first launch both use it. */
+    private val requestHealthPermissions =
+        registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
+            val allowed = granted.containsAll(healthPermissions)
+            viewModel.setHealthConnectAllowed(allowed)
+            if (allowed) {
+                libreLinkUp.schedule()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -157,6 +186,8 @@ class MainActivity : ComponentActivity() {
                 onLoginButtonClicked = { onLoginButtonClicked() },
                 onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() },
                 onSensorLifeDaysChanged = { onSensorLifeDaysChanged(it) },
+                onSyncNowClicked = { onSyncNowClicked() },
+                onAllowHealthConnectClicked = { requestHealthPermissions.launch(healthPermissions) },
             )
         }
 
@@ -203,29 +234,42 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkPermissions() {
-        val permissions =
-            setOf(
-                HealthPermission.getReadPermission(BloodGlucoseRecord::class),
-                HealthPermission.getWritePermission(BloodGlucoseRecord::class),
-            )
-
-        val requestPermissions = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
-            if (granted.containsAll(permissions)) {
-                libreLinkUp.schedule()
-            }
-        }
-
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 val granted =
                     HealthConnectClient.getOrCreate(this@MainActivity).permissionController.getGrantedPermissions()
-                if (granted.containsAll(permissions)) {
+                val allowed = granted.containsAll(healthPermissions)
+                viewModel.setHealthConnectAllowed(allowed)
+                if (allowed) {
                     libreLinkUp.schedule()
                 } else {
-                    requestPermissions.launch(permissions)
+                    requestHealthPermissions.launch(healthPermissions)
                 }
             } catch (e: IllegalStateException) {
                 //HealthConnect not installed
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /** One poll now, and the screen follows it (Eric, 1.5.3: nothing was arriving and nothing said why). */
+    private fun onSyncNowClicked() {
+        val request = OneTimeWorkRequest.Builder(SyncWorker::class.java).build()
+        val workManager = WorkManager.getInstance(this)
+        workManager.enqueue(request)
+        viewModel.setSyncStatus("Syncing now\u2026")
+        workManager.getWorkInfoByIdLiveData(request.id).observe(this) { info ->
+            if (info != null && info.state.isFinished) refreshSensorLines()
+        }
+    }
+
+    /** Health Connect's answer, refreshed on every return to the screen. */
+    private fun refreshHealthConnectAllowed() {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val granted = HealthConnectClient.getOrCreate(this@MainActivity).permissionController.getGrantedPermissions()
+                viewModel.setHealthConnectAllowed(granted.containsAll(healthPermissions))
+            } catch (e: IllegalStateException) {
                 e.printStackTrace()
             }
         }
@@ -239,6 +283,7 @@ class MainActivity : ComponentActivity() {
             packageName
         ))
         refreshSensorLines()
+        refreshHealthConnectAllowed()
         viewModel.setSensorLifeDays(SensorLife.lifeDays(this).toString())
     }
 
@@ -246,6 +291,7 @@ class MainActivity : ComponentActivity() {
         viewModel.setSensor(
             SensorStore.describeSensor(this, java.time.Instant.now()) + "\n" + SensorStore.describeReading(this)
         )
+        viewModel.setSyncStatus(SensorStore.describeSync(this))
     }
 
     /** Typed on the screen; kept as typed, applied once it is a whole number of days. */
@@ -320,7 +366,9 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
              onUrlChanged: (String) -> Unit = {},
              onLoginButtonClicked: () -> Unit = {},
              onDisableBatteryRestrictionsButtonClicked: () -> Unit = {},
-             onSensorLifeDaysChanged: (String) -> Unit = {}) {
+             onSensorLifeDaysChanged: (String) -> Unit = {},
+             onSyncNowClicked: () -> Unit = {},
+             onAllowHealthConnectClicked: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val apiEndpoints = stringArrayResource(id = R.array.api_endpoints)
@@ -412,6 +460,19 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                     Text(stringResource(id = R.string.button_login))
                 }
                 Text(uiState.status)
+                if (!uiState.healthConnectAllowed) {
+                    Text(
+                        text = stringResource(id = R.string.health_connect_not_allowed),
+                        textAlign = TextAlign.Center,
+                    )
+                    Button(onClick = onAllowHealthConnectClicked, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(id = R.string.button_allow_health_connect))
+                    }
+                }
+                Text(uiState.syncStatus)
+                Button(onClick = onSyncNowClicked, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(id = R.string.button_sync_now))
+                }
                 Text(uiState.sensor)
                 // The life LibreView does not send: 15 for a Libre 3 Plus, 14 for a Libre 3 or Libre 2.
                 OutlinedTextField(

@@ -284,12 +284,12 @@ public class LibreLinkUp {
     public static class Sensor {
         public String deviceId;
         public String sn;
-        /** Activation time, Unix seconds. Sent by LibreView; read since Eric's 1.5.1. */
-        public long a;
+        /** Activation time, Unix seconds. Sent by LibreView; read since Eric's 1.5.1. Boxed: a null must not fail the poll. */
+        public Long a;
         /** Warm-up, minutes (60 on a Libre 3). */
-        public int w;
+        public Integer w;
         /** Product type. */
-        public int pt;
+        public Integer pt;
     }
 
     public static class GlucoseMeasurement {
@@ -308,14 +308,14 @@ public class LibreLinkUp {
 
     /** One alarm's settings: threshold in mg/dL and mmol/L, and its delay in minutes. */
     public static class AlarmThreshold {
-        public int th;
-        public double thmm;
-        public int d;
+        public Integer th;
+        public Double thmm;
+        public Integer d;
     }
 
     /** The alarms set in the LibreLinkUp app: high, low, fixed low. */
     public static class AlarmRules {
-        public boolean c;
+        public Boolean c;
         public AlarmThreshold h;
         public AlarmThreshold l;
         public AlarmThreshold f;
@@ -324,16 +324,16 @@ public class LibreLinkUp {
     /** The phone running the Libre app, as LibreView knows it. */
     public static class PatientDevice {
         public String did;
-        public int dtid;
+        public Integer dtid;
         /** The Libre app's version. */
         public String v;
         /** Target range, mg/dL. */
-        public int ll;
-        public int hl;
+        public Integer ll;
+        public Integer hl;
         /** Last update, Unix seconds. */
-        public long u;
-        public boolean alarms;
-        public int fixedLowThreshold;
+        public Long u;
+        public Boolean alarms;
+        public Integer fixedLowThreshold;
     }
 
     public static class Connection {
@@ -347,9 +347,9 @@ public class LibreLinkUp {
         public GlucoseMeasurement glucoseMeasurement;
         public GlucoseMeasurement glucoseItem;
         /** Target range, mg/dL, and the unit the account uses (1 = mg/dL, 0 = mmol/L). Read since Eric's 1.5.1. */
-        public int targetLow;
-        public int targetHigh;
-        public int uom;
+        public Integer targetLow;
+        public Integer targetHigh;
+        public Integer uom;
         public AlarmRules alarmRules;
         public PatientDevice patientDevice;
     }

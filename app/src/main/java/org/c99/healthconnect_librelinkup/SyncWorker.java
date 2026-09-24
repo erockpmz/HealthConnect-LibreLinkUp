@@ -50,6 +50,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
@@ -76,15 +78,36 @@ public class SyncWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        Context context = getApplicationContext();
+        SensorStore.noteAttempt(context);
         try {
+            if (libreLinkUp.getAuthTicket() == null || libreLinkUp.getAuthTicket().token == null) {
+                SensorStore.noteResult(context, "Failed: not logged in");
+                return Result.failure();
+            }
             LibreLinkUp.ConnectionsResult result = libreLinkUp.connections();
+            if (result == null || result.data == null || result.data.isEmpty()) {
+                SensorStore.noteResult(context, "Failed: LibreView returned no connection" + (result != null && result.error != null ? " (" + result.error.message + ")" : ""));
+                return Result.failure();
+            }
             libreLinkUp.setAuthTicket(result.ticket);
             LibreLinkUp.Connection connection = result.data.get(0);
             LibreLinkUp.GlucoseMeasurement gm = connection.glucoseMeasurement;
+            if (gm == null) {
+                SensorStore.noteResult(context, "Failed: no glucose reading in the reply");
+                return Result.failure();
+            }
             ZonedDateTime time = parseTime(gm.FactoryTimestamp);
 
-            // Everything else the poll said, for the screen and for HealthView (Eric's 1.5.1).
-            SensorStore.save(getApplicationContext(), connection, Instant.from(time), System.currentTimeMillis());
+            // Everything else the poll said, for the screen and for HealthView
+            // (Eric's 1.5.1). A surprise in it must not cost the glucose.
+            String extrasNote = "";
+            try {
+                SensorStore.save(context, connection, Instant.from(time), System.currentTimeMillis());
+            } catch (Exception e) {
+                e.printStackTrace();
+                extrasNote = "; sensor details failed: " + e.getClass().getSimpleName();
+            }
 
             // The latest reading, as before, but with a stable id so a second
             // poll of the same reading updates it rather than adding a twin.
@@ -110,6 +133,11 @@ public class SyncWorker extends Worker {
                 e.printStackTrace();
             }
 
+            // Waited on, so the result on the screen is Health Connect's answer,
+            // not the request's. A refused write (permission not granted after a
+            // reinstall) used to vanish into a callback nobody read.
+            final CountDownLatch done = new CountDownLatch(1);
+            final Throwable[] failure = new Throwable[1];
             healthConnectClient.insertRecords(records, new Continuation<InsertRecordsResponse>() {
                 @NonNull
                 @Override
@@ -119,9 +147,21 @@ public class SyncWorker extends Worker {
 
                 @Override
                 public void resumeWith(@NonNull Object o) {
-
+                    if (o instanceof kotlin.Result.Failure) {
+                        failure[0] = ((kotlin.Result.Failure) o).exception;
+                    }
+                    done.countDown();
                 }
             });
+            if (!done.await(30, TimeUnit.SECONDS)) {
+                SensorStore.noteResult(context, "Failed: Health Connect did not answer in 30 s" + extrasNote);
+                return Result.failure();
+            }
+            if (failure[0] != null) {
+                SensorStore.noteResult(context, "Failed: Health Connect refused the write: " + failure[0].getClass().getSimpleName() + ": " + failure[0].getMessage() + extrasNote);
+                return Result.failure();
+            }
+            SensorStore.noteResult(context, "OK, " + records.size() + " readings written" + extrasNote);
 
             if(GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext()) == com.google.android.gms.common.ConnectionResult.SUCCESS) {
                 try {
@@ -143,6 +183,7 @@ public class SyncWorker extends Worker {
             }
         } catch (Exception e) {
             e.printStackTrace();
+            SensorStore.noteResult(context, "Failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return Result.failure();
         }
 

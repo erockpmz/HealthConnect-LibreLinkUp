@@ -20,6 +20,9 @@
     <string name="prompt_email">Email</string>
     <string name="prompt_password">Password</string>
     <string name="prompt_url">Server</string>
+    <string name="button_sync_now">Sync now</string>
+    <string name="button_allow_health_connect">Allow in Health Connect</string>
+    <string name="health_connect_not_allowed">Health Connect has not allowed this app to read and write glucose, so nothing syncs. Reinstalling the app clears that permission.</string>
     <string name="prompt_sensor_life">Sensor life, days (15 for a Libre 3 Plus, 14 for a Libre 3)</string>
     <string name="button_login">Login to LibreLinkUp</string>
     <string name="status_login">Enter your email address and password above to login to LibreLinkUp</string>
