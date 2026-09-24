@@ -96,6 +96,8 @@ data class LoginUiState(
     var email: String = "",
     var password: String = "",
     var status: String = "",
+    /** "Sensor ends in 6 days (3 Oct 2026)", from the last poll (Eric's 1.5.1). */
+    var sensor: String = "",
     var version: String = "Version",
     var isIgnoringBatteryOptimizations: Boolean = false
 )
@@ -118,6 +120,10 @@ class LoginViewModel: ViewModel() {
 
     fun setStatus(status: String) {
         _uiState.value = _uiState.value.copy(status = status)
+    }
+
+    fun setSensor(sensor: String) {
+        _uiState.value = _uiState.value.copy(sensor = sensor)
     }
 
     fun setVersion(version: String) {
@@ -225,6 +231,9 @@ class MainActivity : ComponentActivity() {
         viewModel.setIsIgnoringBatteryOptimizations(powerManager.isIgnoringBatteryOptimizations(
             packageName
         ))
+        viewModel.setSensor(
+            SensorStore.describeSensor(this, java.time.Instant.now()) + "\n" + SensorStore.describeReading(this)
+        )
     }
 
     @SuppressLint("BatteryLife")
@@ -380,6 +389,7 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                     Text(stringResource(id = R.string.button_login))
                 }
                 Text(uiState.status)
+                Text(uiState.sensor)
                 Spacer(Modifier.weight(1f))
                 if(!uiState.isIgnoringBatteryOptimizations) {
                     Text(

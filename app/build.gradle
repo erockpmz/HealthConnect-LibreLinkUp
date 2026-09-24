@@ -27,8 +27,8 @@ android {
         applicationId "org.c99.healthconnect_librelinkup"
         minSdk 28
         targetSdk 34
-        versionCode 5
-        versionName "1.5"
+        versionCode 6
+        versionName "1.5.1"
         vectorDrawables {
             useSupportLibrary true
         }
@@ -76,6 +76,7 @@ dependencies {
     implementation libs.compose.material
     implementation libs.compose.foundation
     implementation libs.activity.compose
+    testImplementation 'junit:junit:4.13.2'
     implementation libs.androidx.lifecycle.runtime.ktx
     implementation platform(libs.compose.bom)
     implementation libs.ui

@@ -29,6 +29,11 @@
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
+    <!-- Only an app signed with the same key (Eric's HealthView) may read the sensor row. -->
+    <permission
+        android:name="org.c99.healthconnect_librelinkup.permission.READ_SENSOR"
+        android:protectionLevel="signature" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -67,6 +72,13 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- The current sensor for HealthView: see SensorProvider. -->
+        <provider
+            android:name=".SensorProvider"
+            android:authorities="org.c99.healthconnect_librelinkup.sensor"
+            android:exported="true"
+            android:readPermission="org.c99.healthconnect_librelinkup.permission.READ_SENSOR" />
 
         <receiver
             android:name=".BootReceiver"

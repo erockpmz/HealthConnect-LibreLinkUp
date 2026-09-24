@@ -242,6 +242,32 @@ public class LibreLinkUp {
         }
     }
 
+    /**
+     * The last twelve hours of readings for one patient, one every fifteen
+     * minutes or so. Since Eric's 1.5.1: the app used to keep only the latest
+     * reading each poll, so a phone off the network left holes in Health
+     * Connect; the graph fills them.
+     */
+    public GraphResult graph(String patientId) throws IOException {
+        JsonAdapter<GraphResult> adapter = moshi.adapter(GraphResult.class);
+        Headers headers = new Headers.Builder().addAll(LIBRELINKUP_HEADERS)
+                .add("Authorization", "Bearer " + authTicket.token)
+                .add("Account-Id", AccountID())
+                .build();
+
+        Request request = new Request.Builder()
+                .url(LIBRELINKUP_URL + "/llu/connections/" + patientId + "/graph")
+                .headers(headers)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful())
+                throw new IOException("Unexpected code " + response);
+
+            return adapter.fromJson(response.body().string());
+        }
+    }
+
     public static class User {
         public String id;
         public String firstName;
@@ -258,6 +284,12 @@ public class LibreLinkUp {
     public static class Sensor {
         public String deviceId;
         public String sn;
+        /** Activation time, Unix seconds. Sent by LibreView; read since Eric's 1.5.1. */
+        public long a;
+        /** Warm-up, minutes (60 on a Libre 3). */
+        public int w;
+        /** Product type. */
+        public int pt;
     }
 
     public static class GlucoseMeasurement {
@@ -274,6 +306,36 @@ public class LibreLinkUp {
         public boolean isLow;
     }
 
+    /** One alarm's settings: threshold in mg/dL and mmol/L, and its delay in minutes. */
+    public static class AlarmThreshold {
+        public int th;
+        public double thmm;
+        public int d;
+    }
+
+    /** The alarms set in the LibreLinkUp app: high, low, fixed low. */
+    public static class AlarmRules {
+        public boolean c;
+        public AlarmThreshold h;
+        public AlarmThreshold l;
+        public AlarmThreshold f;
+    }
+
+    /** The phone running the Libre app, as LibreView knows it. */
+    public static class PatientDevice {
+        public String did;
+        public int dtid;
+        /** The Libre app's version. */
+        public String v;
+        /** Target range, mg/dL. */
+        public int ll;
+        public int hl;
+        /** Last update, Unix seconds. */
+        public long u;
+        public boolean alarms;
+        public int fixedLowThreshold;
+    }
+
     public static class Connection {
         public String id;
         public String patientId;
@@ -284,6 +346,29 @@ public class LibreLinkUp {
         public Sensor sensor;
         public GlucoseMeasurement glucoseMeasurement;
         public GlucoseMeasurement glucoseItem;
+        /** Target range, mg/dL, and the unit the account uses (1 = mg/dL, 0 = mmol/L). Read since Eric's 1.5.1. */
+        public int targetLow;
+        public int targetHigh;
+        public int uom;
+        public AlarmRules alarmRules;
+        public PatientDevice patientDevice;
+    }
+
+    /** One sensor LibreView still lists as active, with the phone it reports through. */
+    public static class ActiveSensor {
+        public Sensor sensor;
+        public PatientDevice device;
+    }
+
+    /** The graph endpoint: the connection again, the active sensors, and the last twelve hours of readings. */
+    public static class GraphResult extends LibreLinkUpResult {
+        public static class GraphData {
+            public Connection connection;
+            public List<ActiveSensor> activeSensors;
+            public List<GlucoseMeasurement> graphData;
+        }
+        public GraphData data;
+        public AuthTicket ticket;
     }
 
     public static class LibreLinkUpError {

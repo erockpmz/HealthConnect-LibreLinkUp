@@ -33,9 +33,10 @@ Sam Steele's app; the upstream `README.md` is kept as it is.
   ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx1536m" :app:assembleDebug
   ```
 
-  There are no tests upstream. **Not yet built here**: the first build on
-  this Mac needs Eric's say-so, because the wrapper and build scripts are
-  third-party code (see `PROJECT_CONTEXT.md`).
+  Upstream has no tests; Eric's fork adds JUnit tests under `app/src/test`
+  (run them: `:app:testDebugUnitTest`). First built on this Mac on
+  September 23, 2026 with Eric's say-so (see `PROJECT_CONTEXT.md`,
+  "Building here"); `local.properties` is untracked and carries `sdk.dir`.
 - If a build is ever delivered: bump `versionCode` first, check the APK
   with `aapt2 dump badging`, verify the signer with `apksigner verify
   --print-certs`, and copy it to Dropbox `/Phone Apps` as

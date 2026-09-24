@@ -47,6 +47,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 
 import kotlin.coroutines.Continuation;
@@ -77,38 +79,38 @@ public class SyncWorker extends Worker {
         try {
             LibreLinkUp.ConnectionsResult result = libreLinkUp.connections();
             libreLinkUp.setAuthTicket(result.ticket);
-            LibreLinkUp.GlucoseMeasurement gm = result.data.get(0).glucoseMeasurement;
+            LibreLinkUp.Connection connection = result.data.get(0);
+            LibreLinkUp.GlucoseMeasurement gm = connection.glucoseMeasurement;
+            ZonedDateTime time = parseTime(gm.FactoryTimestamp);
 
-            ZonedDateTime time;
-            if (gm.FactoryTimestamp != null) {
-                try {
-                    // Attempt to parse as a datetime string
-                    time = ZonedDateTime.parse((String) gm.FactoryTimestamp + " +0000", DateTimeFormatter.ofPattern("M/d/y h:m:s a Z")).withZoneSameInstant(ZoneId.systemDefault());
-                } catch (DateTimeParseException e) {
-                    // If parsing fails, assume it's a long timestamp
-                    try {
-                        long timestampMillis = Long.parseLong(gm.FactoryTimestamp);
-                        time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneId.systemDefault());
-                    } catch (NumberFormatException nfe) {
-                        // Handle the case where it's neither a valid datetime string nor a long timestamp
-                        time = ZonedDateTime.now(); // Fallback to current time
+            // Everything else the poll said, for the screen and for HealthView (Eric's 1.5.1).
+            SensorStore.save(getApplicationContext(), connection, Instant.from(time), System.currentTimeMillis());
+
+            // The latest reading, as before, but with a stable id so a second
+            // poll of the same reading updates it rather than adding a twin.
+            List<BloodGlucoseRecord> records = new ArrayList<>();
+            records.add(record(time, gm.ValueInMgPerDl));
+
+            // The last twelve hours from the graph endpoint: fills the holes a
+            // phone off the network left, at no cost when nothing was missed,
+            // since the ids are the readings' times.
+            try {
+                LibreLinkUp.GraphResult graph = libreLinkUp.graph(connection.patientId);
+                if (graph != null && graph.ticket != null) libreLinkUp.setAuthTicket(graph.ticket);
+                if (graph != null && graph.data != null && graph.data.graphData != null) {
+                    for (LibreLinkUp.GlucoseMeasurement point : graph.data.graphData) {
+                        if (point == null || point.ValueInMgPerDl <= 0 || point.FactoryTimestamp == null) continue;
+                        ZonedDateTime at = parseTime(point.FactoryTimestamp);
+                        if (at.toInstant().equals(time.toInstant())) continue;
+                        records.add(record(at, point.ValueInMgPerDl));
                     }
                 }
-            } else {
-                // Handle null FactoryTimestamp
-                time = ZonedDateTime.now(); // Fallback to current time
+            } catch (Exception e) {
+                // The graph is a bonus; the latest reading still goes through.
+                e.printStackTrace();
             }
 
-            BloodGlucoseRecord r = new BloodGlucoseRecord(
-                    Instant.from(time),
-                    time.getOffset(),
-                    BloodGlucose.milligramsPerDeciliter(gm.ValueInMgPerDl),
-                    BloodGlucoseRecord.SPECIMEN_SOURCE_INTERSTITIAL_FLUID,
-                    0,
-                    BloodGlucoseRecord.RELATION_TO_MEAL_UNKNOWN,
-                    new Metadata("", new DataOrigin(getApplicationContext().getPackageName()), Instant.from(time), null, 0, null, 0)
-            );
-            healthConnectClient.insertRecords(Collections.singletonList(r), new Continuation<InsertRecordsResponse>() {
+            healthConnectClient.insertRecords(records, new Continuation<InsertRecordsResponse>() {
                 @NonNull
                 @Override
                 public CoroutineContext getContext() {
@@ -145,5 +147,38 @@ public class SyncWorker extends Worker {
         }
 
         return Result.success();
+    }
+
+    /**
+     * LibreView's "M/d/yyyy h:mm:ss a" is UTC; upstream (1.5) then moves it
+     * to the phone's zone for the Google Health app's sake. Same instant
+     * either way, which is what Health Connect stores. Unchanged from
+     * upstream, only pulled out so the graph points go through it too.
+     */
+    static ZonedDateTime parseTime(String factoryTimestamp) {
+        if (factoryTimestamp == null) return ZonedDateTime.now();
+        try {
+            return ZonedDateTime.parse(factoryTimestamp + " +0000", DateTimeFormatter.ofPattern("M/d/y h:m:s a Z")).withZoneSameInstant(ZoneId.systemDefault());
+        } catch (DateTimeParseException e) {
+            try {
+                return ZonedDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(factoryTimestamp)), ZoneId.systemDefault());
+            } catch (NumberFormatException nfe) {
+                return ZonedDateTime.now();
+            }
+        }
+    }
+
+    /** One reading, keyed on its time so re-sending it updates rather than duplicates. */
+    private BloodGlucoseRecord record(ZonedDateTime time, int mgdl) {
+        long seconds = time.toEpochSecond();
+        return new BloodGlucoseRecord(
+                Instant.from(time),
+                time.getOffset(),
+                BloodGlucose.milligramsPerDeciliter(mgdl),
+                BloodGlucoseRecord.SPECIMEN_SOURCE_INTERSTITIAL_FLUID,
+                0,
+                BloodGlucoseRecord.RELATION_TO_MEAL_UNKNOWN,
+                new Metadata("", new DataOrigin(getApplicationContext().getPackageName()), Instant.from(time), "llu-" + seconds, seconds, null, 0)
+        );
     }
 }
